@@ -1,0 +1,53 @@
+series:
+  # 跨资产总览（15）— tsanghi 行情 + FRED 经济数据
+  - {id: sp500, name: "美国股票", module: cross_asset, source: tsanghi, series_id: "tsanghi:index/USA/GSPC", asset_proxy: "S&P 500", frequency: daily, unit: index, transform: return, direction: risk_on, staleness_days: 2}
+  - {id: euro_stocks, name: "欧洲股票", module: cross_asset, source: tsanghi, series_id: "tsanghi:index/DEU/STOXX50E", asset_proxy: "Euro Stoxx 50", frequency: daily, unit: index, transform: return, direction: risk_on, staleness_days: 2}
+  - {id: japan_stocks, name: "日本股票", module: cross_asset, source: tsanghi, series_id: "tsanghi:index/JPN/N225", asset_proxy: "Nikkei 225", frequency: daily, unit: index, transform: return, direction: risk_on, staleness_days: 2}
+  - {id: china_stocks, name: "沪深300", module: cross_asset, source: tsanghi, series_id: "tsanghi:index/CHN/000300", asset_proxy: "沪深300", frequency: daily, unit: index, transform: return, direction: risk_on, staleness_days: 2}
+  - {id: hstech, name: "恒生科技", module: cross_asset, source: tsanghi, series_id: "tsanghi:index/HKG/HSTECH", asset_proxy: "恒生科技指数", frequency: daily, unit: index, transform: return, direction: risk_on, staleness_days: 2}
+  - {id: chinext, name: "创业板指", module: cross_asset, source: tsanghi, series_id: "tsanghi:index/CHN/399006", asset_proxy: "创业板指", frequency: daily, unit: index, transform: return, direction: risk_on, staleness_days: 2}
+  - {id: star_index, name: "科创综指", module: cross_asset, source: tsanghi, series_id: "tsanghi:index/CHN/000680", asset_proxy: "科创综指", frequency: daily, unit: index, transform: return, direction: risk_on, staleness_days: 2}
+  - {id: us_2y, name: "美国2年期国债", module: cross_asset, source: openbb, series_id: "fred:DGS2", asset_proxy: "UST 2Y", frequency: daily, unit: percent, transform: change, direction: tightening, staleness_days: 2}
+  - {id: us_10y, name: "美国10年期国债", module: cross_asset, source: openbb, series_id: "fred:DGS10", asset_proxy: "UST 10Y", frequency: daily, unit: percent, transform: change, direction: tightening, staleness_days: 2}
+  - {id: us_30y, name: "美国30年期国债", module: cross_asset, source: openbb, series_id: "fred:DGS30", asset_proxy: "UST 30Y", frequency: daily, unit: percent, transform: change, direction: tightening, staleness_days: 2}
+  - {id: dxy, name: "美元指数", module: cross_asset, source: tsanghi, series_id: "tsanghi:forex/DXY", asset_proxy: "DXY", frequency: daily, unit: index, transform: return, direction: tightening, staleness_days: 2}
+  - {id: usdcny, name: "人民币对美元", module: cross_asset, source: tsanghi, series_id: "tsanghi:forex/USDCNY", asset_proxy: "USD/CNY", frequency: daily, unit: ratio, transform: return, direction: tightening, staleness_days: 2}
+  - {id: eurusd, name: "欧元兑美元", module: cross_asset, source: tsanghi, series_id: "tsanghi:forex/EURUSD", asset_proxy: "EUR/USD", frequency: daily, unit: ratio, transform: return, direction: easing, staleness_days: 2}
+  - {id: usdjpy, name: "美元兑日元", module: cross_asset, source: tsanghi, series_id: "tsanghi:forex/USDJPY", asset_proxy: "USD/JPY", frequency: daily, unit: ratio, transform: return, direction: tightening, staleness_days: 2}
+  - {id: gold, name: "黄金", module: cross_asset, source: tsanghi, series_id: "tsanghi:forex/XAUUSD", asset_proxy: "COMEX Gold", frequency: daily, unit: usd, transform: return, direction: inflation, staleness_days: 2}
+  - {id: copper, name: "铜", module: cross_asset, source: tsanghi, series_id: "tsanghi:forex/XAUCOP", asset_proxy: "COMEX Copper", frequency: daily, unit: usd, transform: return, direction: growth, staleness_days: 2}
+  - {id: oil, name: "原油", module: cross_asset, source: tsanghi, series_id: "tsanghi:forex/USOIL", asset_proxy: "WTI", frequency: daily, unit: usd, transform: return, direction: inflation, staleness_days: 2}
+  - {id: hy_spread, name: "美国高收益信用利差", module: cross_asset, source: openbb, series_id: "fred:BAMLH0A0HYM2", asset_proxy: "US HY OAS", frequency: daily, unit: percent, transform: change, direction: risk_off, staleness_days: 2}
+  - {id: vix, name: "VIX", module: cross_asset, source: tsanghi, series_id: "tsanghi:index/USA/VIX", asset_proxy: "VIX", frequency: daily, unit: index, transform: change, direction: risk_off, staleness_days: 2}
+
+  # 增长脉冲（8）
+  - {id: us_payrolls, name: "美国非农就业", module: growth, source: openbb, series_id: "fred:PAYEMS", asset_proxy: null, frequency: monthly, unit: thousands, transform: mom_change, direction: growth, staleness_days: 65}
+  - {id: us_retail, name: "美国实际零售", module: growth, source: openbb, series_id: "fred:RRSFS", asset_proxy: null, frequency: monthly, unit: index, transform: yoy, direction: growth, staleness_days: 65}
+  - {id: us_indpro, name: "美国工业产出", module: growth, source: openbb, series_id: "fred:INDPRO", asset_proxy: null, frequency: monthly, unit: index, transform: yoy, direction: growth, staleness_days: 65}
+  - {id: us_housing, name: "美国新屋开工", module: growth, source: openbb, series_id: "fred:HOUST", asset_proxy: null, frequency: monthly, unit: thousands, transform: yoy, direction: growth, staleness_days: 65}
+  - {id: us_ism, name: "美国ISM制造业", module: growth, source: openbb, series_id: "fred:NAPM", asset_proxy: null, frequency: monthly, unit: index, transform: level, direction: growth, staleness_days: 65}
+  - {id: china_credit, name: "中国新增信贷", module: growth, source: akshare, series_id: "macro_china_new_financial_credit:当月", asset_proxy: "新增人民币贷款", frequency: monthly, unit: billion_cny, transform: yoy, direction: growth, staleness_days: 65}
+  - {id: china_pmi, name: "中国制造业PMI", module: growth, source: akshare, series_id: "macro_china_pmi:制造业-指数", asset_proxy: null, frequency: monthly, unit: index, transform: level, direction: growth, staleness_days: 65}
+  - {id: global_trade, name: "中国出口同比", module: growth, source: akshare, series_id: "macro_china_exports_yoy:今值", asset_proxy: "出口年率代理全球贸易", frequency: monthly, unit: percent, transform: level, direction: growth, staleness_days: 65}
+
+  # 通胀脉冲（5）
+  - {id: core_cpi, name: "美国核心CPI", module: inflation, source: openbb, series_id: "fred:CPILFESL", asset_proxy: null, frequency: monthly, unit: index, transform: yoy, direction: inflation, staleness_days: 65}
+  - {id: core_pce, name: "美国核心PCE", module: inflation, source: openbb, series_id: "fred:PCEPILFE", asset_proxy: null, frequency: monthly, unit: index, transform: yoy, direction: inflation, staleness_days: 65}
+  - {id: wages, name: "美国平均时薪", module: inflation, source: openbb, series_id: "fred:CES0500000003", asset_proxy: null, frequency: monthly, unit: usd, transform: yoy, direction: inflation, staleness_days: 65}
+  - {id: rent, name: "美国主要居所租金", module: inflation, source: openbb, series_id: "fred:CUUS0000SEHA", asset_proxy: null, frequency: monthly, unit: index, transform: yoy, direction: inflation, staleness_days: 65}
+  - {id: gscpi, name: "全球供应链压力", module: inflation, source: openbb, series_id: "fred:GSCPI", asset_proxy: "NY Fed GSCPI", frequency: monthly, unit: zscore, transform: level, direction: inflation, staleness_days: 65}
+
+  # 政策与流动性（5）
+  - {id: fed_funds, name: "联邦基金目标利率", module: policy, source: openbb, series_id: "fred:DFEDTARU", asset_proxy: null, frequency: daily, unit: percent, transform: change, direction: tightening, staleness_days: 2}
+  - {id: real_10y, name: "美国10年实际利率", module: policy, source: openbb, series_id: "fred:DFII10", asset_proxy: "TIPS 10Y", frequency: daily, unit: percent, transform: change, direction: tightening, staleness_days: 2}
+  - {id: fed_assets, name: "美联储总资产", module: policy, source: openbb, series_id: "fred:WALCL", asset_proxy: null, frequency: weekly, unit: million_usd, transform: yoy, direction: easing, staleness_days: 12}
+  - {id: treasury_cash, name: "美国财政部现金余额", module: policy, source: openbb, series_id: "fred:WTREGEN", asset_proxy: "TGA", frequency: weekly, unit: billion_usd, transform: change, direction: tightening, staleness_days: 12}
+  - {id: financial_conditions, name: "芝加哥联储金融条件", module: policy, source: openbb, series_id: "fred:NFCI", asset_proxy: "NFCI", frequency: weekly, unit: zscore, transform: level, direction: tightening, staleness_days: 12}
+
+  # 定价与仓位（3）
+  - {id: breakeven_10y, name: "美国10年盈亏平衡通胀", module: positioning, source: openbb, series_id: "fred:T10YIE", asset_proxy: "10Y Breakeven", frequency: daily, unit: percent, transform: change, direction: inflation, staleness_days: 2}
+  - {id: term_premium, name: "美国10年期限溢价", module: positioning, source: openbb, series_id: "fred:THREEFYTP10", asset_proxy: "ACM 10Y Term Premium", frequency: daily, unit: percent, transform: change, direction: tightening, staleness_days: 2}
+  - {id: move, name: "美债隐含波动率", module: positioning, source: tsanghi, series_id: "tsanghi:index/USA/MOVE", asset_proxy: "MOVE", frequency: daily, unit: index, transform: zscore, direction: risk_off, staleness_days: 2}
+
+  # 事件与情景（1）
+  - {id: curve_2s10s, name: "美债2s10s曲线", module: events, source: openbb, series_id: "fred:T10Y2Y", asset_proxy: "2s10s", frequency: daily, unit: percent, transform: change, direction: growth, staleness_days: 2}

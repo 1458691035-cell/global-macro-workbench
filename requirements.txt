@@ -1,0 +1,14 @@
+akshare>=1.18.64
+duckdb>=1.1
+httpx>=0.27
+numpy>=1.26
+openbb>=4.4
+openbb-fred>=1.4
+openbb-yfinance>=1.4
+pandas>=2.2
+plotly>=5.24
+pyarrow>=17
+python-dotenv>=1.0
+pyyaml>=6.0
+streamlit>=1.39
+yfinance>=0.2.44
