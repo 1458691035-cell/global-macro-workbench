@@ -21,8 +21,13 @@ def ensure_writable_runtime() -> Path:
     """Redirect DB/OpenBB caches to ``/tmp`` when ``data/`` is not writable.
 
     Sets ``MACRO_DATA_DIR``, ``MACRO_DB_PATH``, and OpenBB cache env vars.
+    Also disables OpenBB auto-build (it tries to write ``.build.lock`` into
+    site-packages, which fails on Streamlit Community Cloud).
     Safe to call multiple times. Returns the effective data directory.
     """
+    # Must be set before any ``import openbb``; site-packages is read-only on Cloud.
+    os.environ.setdefault("OPENBB_AUTO_BUILD", "0")
+
     existing = os.environ.get("MACRO_DATA_DIR")
     if existing:
         data_dir = Path(existing)
@@ -44,8 +49,10 @@ def ensure_writable_runtime() -> Path:
     TMP_OPENBB_DIR.mkdir(parents=True, exist_ok=True)
     os.environ["MACRO_DATA_DIR"] = str(TMP_DATA_DIR)
     os.environ["MACRO_DB_PATH"] = str(dst_db)
+    # Point OpenBB user/home caches at /tmp (HOME may also be constrained).
     os.environ.setdefault("OPENBB_USER_SETTINGS_PATH", str(TMP_OPENBB_DIR))
     os.environ.setdefault("OPENBB_CACHE_DIR", str(TMP_OPENBB_DIR))
+    os.environ.setdefault("XDG_CACHE_HOME", str(TMP_OPENBB_DIR / "xdg_cache"))
     return TMP_DATA_DIR
 
 

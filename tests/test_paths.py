@@ -84,5 +84,13 @@ def test_parquet_dir_prefers_existing_env(tmp_path: Path, monkeypatch) -> None:
     _clear_path_env()
 
 
+def test_ensure_writable_runtime_disables_openbb_autobuild(monkeypatch) -> None:
+    _clear_path_env()
+    monkeypatch.delenv("OPENBB_AUTO_BUILD", raising=False)
+    ensure_writable_runtime()
+    assert os.environ["OPENBB_AUTO_BUILD"] == "0"
+    _clear_path_env()
+
+
 def test_default_data_dir_constant() -> None:
     assert DEFAULT_DATA_DIR.name == "data"

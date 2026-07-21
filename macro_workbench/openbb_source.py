@@ -6,6 +6,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pandas as pd
 from dotenv import load_dotenv
 import os
@@ -26,6 +27,7 @@ COLUMNS = [
     "source",
     "last_updated",
 ]
+FRED_OBS_URL = "https://api.stlouisfed.org/fred/series/observations"
 
 _PROXY_ENV_KEYS = (
     "HTTP_PROXY",
@@ -53,11 +55,28 @@ def _load_env() -> None:
     load_dotenv(ROOT / ".env", override=False)
 
 
-def _configure_credentials(obb: Any) -> None:
+def _fred_api_key() -> str:
+    """Resolve FRED key from env or Streamlit secrets."""
     _load_env()
     key = os.getenv("FRED_API_KEY", "").strip()
-    if not key:
-        raise RuntimeError("缺少 FRED_API_KEY：请在项目根目录 .env 中配置")
+    if key:
+        return key
+    try:
+        import streamlit as st
+
+        secrets = getattr(st, "secrets", None)
+        if secrets is not None and "FRED_API_KEY" in secrets:
+            return str(secrets["FRED_API_KEY"]).strip()
+    except Exception:
+        pass
+    raise RuntimeError(
+        "缺少 FRED_API_KEY：请在 .env、环境变量或 Streamlit Secrets 中配置"
+    )
+
+
+def _configure_credentials(obb: Any) -> None:
+    """Legacy helper kept for tests; sets OpenBB credential from env/secrets."""
+    key = _fred_api_key()
     obb.user.credentials.fred_api_key = key
 
 
@@ -69,12 +88,43 @@ def _parse_ref(series_id: str) -> tuple[str, str]:
 
 
 class OpenBBFetcher:
-    def __init__(self, obb_module: Any | None = None) -> None:
-        if obb_module is None:
-            from openbb import obb as obb_module
+    """Fetch FRED (and optional yfinance) series without importing ``openbb``.
 
-            _configure_credentials(obb_module)
+    Streamlit Community Cloud cannot write OpenBB's ``.build.lock`` under
+    site-packages; calling the FRED REST API directly avoids that import path.
+    """
+
+    def __init__(
+        self,
+        obb_module: Any | None = None,
+        *,
+        api_key: str | None = None,
+        client: httpx.Client | None = None,
+    ) -> None:
         self.obb = obb_module
+        if obb_module is not None:
+            existing = getattr(obb_module.user.credentials, "fred_api_key", None)
+            if not (existing or api_key):
+                _configure_credentials(obb_module)
+            elif api_key and not existing:
+                obb_module.user.credentials.fred_api_key = api_key
+            self.api_key = (
+                getattr(obb_module.user.credentials, "fred_api_key", None) or api_key
+            )
+        else:
+            self.api_key = api_key if api_key is not None else _fred_api_key()
+        self._client = client
+        self._owns_client = client is None
+
+    def _http(self) -> httpx.Client:
+        if self._client is None:
+            self._client = httpx.Client(timeout=30.0)
+        return self._client
+
+    def close(self) -> None:
+        if self._owns_client and self._client is not None:
+            self._client.close()
+            self._client = None
 
     def fetch(
         self,
@@ -109,68 +159,45 @@ class OpenBBFetcher:
         market_specs = [s for s in specs if _safe_provider(s) == "yfinance"]
         other = [s for s in specs if _safe_provider(s) not in {"fred", "yfinance"}]
 
-        for spec in other:
-            report(f"跳过不支持的 provider：{spec.name}")
-            errors[spec.id] = f"不支持的 OpenBB provider: {spec.series_id}"
-            done += 1
+        try:
+            for spec in other:
+                report(f"跳过不支持的 provider：{spec.name}")
+                errors[spec.id] = f"不支持的 OpenBB provider: {spec.series_id}"
+                done += 1
 
-        if fred_specs:
-            shared_starts = {start_for(spec) for spec in fred_specs}
-            # 批量仅在无进度回调且所有序列同一 start 时使用
-            use_batch = on_progress is None and len(shared_starts) == 1
-            if use_batch:
-                batch_start = next(iter(shared_starts))
-                preview = "、".join(spec.name for spec in fred_specs[:3])
-                suffix = f" 等 {len(fred_specs)} 条" if len(fred_specs) > 3 else ""
-                report(f"批量获取 FRED：{preview}{suffix}")
-                try:
-                    batch_frames = self._fetch_fred_batch(
-                        fred_specs, batch_start, end_date, fetched_at
-                    )
-                    rows.extend(batch_frames)
-                    done += len(fred_specs)
-                    fetched_ids = {
-                        frame.series_id.iloc[0] for frame in rows if not frame.empty
-                    }
-                    for spec in fred_specs:
-                        if spec.id not in fetched_ids and spec.id not in errors:
-                            errors[spec.id] = "FRED 返回为空"
-                    report(f"FRED 批量完成（{len(fred_specs)} 条）")
-                except Exception:
-                    use_batch = False
-
-            if not use_batch:
-                for spec in fred_specs:
-                    report(
-                        f"正在获取：{spec.name}（{spec.series_id}，自 {start_for(spec).date()}）"
-                    )
-                    try:
-                        frame = self._fetch_fred_one(
-                            spec, start_for(spec), end_date, fetched_at
-                        )
-                        if frame.empty:
-                            errors[spec.id] = "FRED 返回为空"
-                        else:
-                            rows.append(frame)
-                    except Exception as inner:
-                        errors[spec.id] = f"{type(inner).__name__}: {inner}"
-                    done += 1
-
-        for spec in market_specs:
-            report(
-                f"正在获取：{spec.name}（{spec.series_id}，自 {start_for(spec).date()}）"
-            )
-            try:
-                frame = self._fetch_yfinance(
-                    spec, start_for(spec), end_date, fetched_at
+            for spec in fred_specs:
+                report(
+                    f"正在获取：{spec.name}（{spec.series_id}，自 {start_for(spec).date()}）"
                 )
-                if frame.empty:
-                    errors[spec.id] = "yfinance 返回为空"
-                else:
-                    rows.append(frame)
-            except Exception as exc:
-                errors[spec.id] = f"{type(exc).__name__}: {exc}"
-            done += 1
+                try:
+                    frame = self._fetch_fred_one(
+                        spec, start_for(spec), end_date, fetched_at
+                    )
+                    if frame.empty:
+                        errors[spec.id] = "FRED 返回为空"
+                    else:
+                        rows.append(frame)
+                except Exception as inner:
+                    errors[spec.id] = f"{type(inner).__name__}: {inner}"
+                done += 1
+
+            for spec in market_specs:
+                report(
+                    f"正在获取：{spec.name}（{spec.series_id}，自 {start_for(spec).date()}）"
+                )
+                try:
+                    frame = self._fetch_yfinance(
+                        spec, start_for(spec), end_date, fetched_at
+                    )
+                    if frame.empty:
+                        errors[spec.id] = "yfinance 返回为空"
+                    else:
+                        rows.append(frame)
+                except Exception as exc:
+                    errors[spec.id] = f"{type(exc).__name__}: {exc}"
+                done += 1
+        finally:
+            self.close()
 
         observations = (
             pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(columns=COLUMNS)
@@ -184,34 +211,35 @@ class OpenBBFetcher:
         end_date: pd.Timestamp,
         fetched_at: datetime,
     ) -> list[pd.DataFrame]:
-        symbols = [_parse_ref(spec.series_id)[1] for spec in specs]
-        symbol_to_spec = {_parse_ref(spec.series_id)[1]: spec for spec in specs}
-        result = self.obb.economy.fred_series(
-            symbol=",".join(symbols),
-            start_date=start_date.date().isoformat(),
-            end_date=end_date.date().isoformat(),
-            provider="fred",
-        )
-        wide = result.to_dataframe()
-        if wide.empty:
-            return []
+        """Fetch each FRED symbol; kept for tests/callers that expect a batch API."""
         frames: list[pd.DataFrame] = []
-        for column in wide.columns:
-            if column not in symbol_to_spec:
-                continue
-            frames.append(
-                _normalize_series(
-                    wide[column],
-                    symbol_to_spec[column],
-                    source="openbb:fred",
-                    fetched_at=fetched_at,
-                    start_date=start_date,
-                    end_date=end_date,
-                )
-            )
-        return [frame for frame in frames if not frame.empty]
+        for spec in specs:
+            frame = self._fetch_fred_one(spec, start_date, end_date, fetched_at)
+            if not frame.empty:
+                frames.append(frame)
+        return frames
 
     def _fetch_fred_one(
+        self,
+        spec: SeriesSpec,
+        start_date: pd.Timestamp,
+        end_date: pd.Timestamp,
+        fetched_at: datetime,
+    ) -> pd.DataFrame:
+        if self.obb is not None:
+            return self._fetch_fred_via_obb(spec, start_date, end_date, fetched_at)
+        _, symbol = _parse_ref(spec.series_id)
+        series = self._fred_observations(symbol, start_date, end_date)
+        return _normalize_series(
+            series,
+            spec,
+            source="openbb:fred",
+            fetched_at=fetched_at,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    def _fetch_fred_via_obb(
         self,
         spec: SeriesSpec,
         start_date: pd.Timestamp,
@@ -238,6 +266,34 @@ class OpenBBFetcher:
             end_date=end_date,
         )
 
+    def _fred_observations(
+        self, symbol: str, start_date: pd.Timestamp, end_date: pd.Timestamp
+    ) -> pd.Series:
+        if not self.api_key:
+            raise RuntimeError("缺少 FRED_API_KEY")
+        params = {
+            "series_id": symbol,
+            "api_key": self.api_key,
+            "file_type": "json",
+            "observation_start": start_date.date().isoformat(),
+            "observation_end": end_date.date().isoformat(),
+        }
+        response = self._http().get(FRED_OBS_URL, params=params)
+        response.raise_for_status()
+        payload = response.json()
+        if "error_code" in payload:
+            raise RuntimeError(payload.get("error_message") or str(payload["error_code"]))
+        observations = payload.get("observations") or []
+        if not observations:
+            return pd.Series(dtype=float)
+        frame = pd.DataFrame(observations)
+        frame = frame.replace(".", pd.NA)
+        frame["date"] = pd.to_datetime(frame["date"])
+        frame["value"] = pd.to_numeric(frame["value"], errors="coerce")
+        frame = frame.dropna(subset=["value"]).set_index("date")["value"].astype(float)
+        frame.index = pd.to_datetime(frame.index).tz_localize(None)
+        return frame
+
     def _fetch_yfinance(
         self,
         spec: SeriesSpec,
@@ -261,29 +317,29 @@ class OpenBBFetcher:
     ) -> pd.Series:
         start = start_date.date().isoformat()
         end = end_date.date().isoformat()
-        # Prefer OpenBB router; fall back to yfinance package on empty/rate-limit.
-        for caller in (
-            lambda: self.obb.index.price.historical(
-                symbol=symbol, start_date=start, end_date=end, provider="yfinance"
-            ),
-            lambda: self.obb.equity.price.historical(
-                symbol=symbol, start_date=start, end_date=end, provider="yfinance"
-            ),
-            lambda: self.obb.currency.price.historical(
-                symbol=symbol.replace("=X", ""),
-                start_date=start,
-                end_date=end,
-                provider="yfinance",
-            ),
-        ):
-            try:
-                frame = caller().to_dataframe()
-                if frame is not None and not frame.empty:
-                    series = _extract_close(frame)
-                    if not series.empty:
-                        return series
-            except Exception:
-                continue
+        if self.obb is not None:
+            for caller in (
+                lambda: self.obb.index.price.historical(
+                    symbol=symbol, start_date=start, end_date=end, provider="yfinance"
+                ),
+                lambda: self.obb.equity.price.historical(
+                    symbol=symbol, start_date=start, end_date=end, provider="yfinance"
+                ),
+                lambda: self.obb.currency.price.historical(
+                    symbol=symbol.replace("=X", ""),
+                    start_date=start,
+                    end_date=end,
+                    provider="yfinance",
+                ),
+            ):
+                try:
+                    frame = caller().to_dataframe()
+                    if frame is not None and not frame.empty:
+                        series = _extract_close(frame)
+                        if not series.empty:
+                            return series
+                except Exception:
+                    continue
 
         import yfinance as yf
 
@@ -357,7 +413,9 @@ def fetch_openbb_observations(
     start_by_series: Mapping[str, pd.Timestamp] | None = None,
 ) -> FetchResult:
     if on_progress is not None:
-        on_progress(0, max(len(specs), 1), "正在初始化 OpenBB / 读取 FRED 密钥…")
+        on_progress(0, max(len(specs), 1), "正在初始化 FRED / 读取 API 密钥…")
+    # Avoid OpenBB package builder writing .build.lock into read-only site-packages.
+    os.environ.setdefault("OPENBB_AUTO_BUILD", "0")
     with _without_proxy_env():
         return OpenBBFetcher().fetch(
             specs,
