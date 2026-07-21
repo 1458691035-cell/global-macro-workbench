@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pandas as pd
@@ -10,19 +9,13 @@ import streamlit as st
 from .data_router import fetch_all_observations
 from .memo import generate_memo
 from .models import MODULE_NAMES, SeriesSpec, load_series
+from .paths import db_path, ensure_writable_runtime, parquet_dir
 from .pipeline import run_pipeline
 from .storage import MacroStore
 from .tsanghi_source import fetch_tsanghi_realtime
 
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def _db_path() -> Path:
-    env = os.environ.get("MACRO_DB_PATH")
-    if env:
-        return Path(env)
-    return ROOT / "data" / "macro.duckdb"
 
 CHANGE_COLUMNS: dict[str, list[tuple[str, str]]] = {
     "daily": [("change_1d", "change_1d"), ("change_1w", "change_1w"), ("change_1m", "change_1m")],
@@ -36,10 +29,11 @@ FREQ_LABELS = {"daily": "日度", "weekly": "周度", "monthly": "月度", "quar
 
 
 def run() -> None:
+    ensure_writable_runtime()
     st.set_page_config(page_title="全球宏观策略工作台", page_icon="🌐", layout="wide")
     st.title("全球宏观策略工作台")
     specs = load_series(ROOT / "config" / "series.yaml")
-    store = MacroStore(_db_path())
+    store = MacroStore(db_path())
 
     if st.sidebar.button("实时更新", width="stretch", type="primary"):
         st.session_state["pending_realtime"] = True
@@ -87,11 +81,19 @@ def run() -> None:
                 )
 
     if mode := st.session_state.pop("pending_update", None):
-        _execute_update(specs, store, mode=mode)
+        try:
+            _execute_update(specs, store, mode=mode)
+        except Exception as exc:  # noqa: BLE001 — surface any update failure in UI
+            st.session_state["update_level"] = "error"
+            st.session_state["update_message"] = f"更新失败：{exc}"
         st.rerun()
 
     if picked_ids := st.session_state.pop("pending_insert", None):
-        _execute_insert(specs, store, picked_ids)
+        try:
+            _execute_insert(specs, store, picked_ids)
+        except Exception as exc:  # noqa: BLE001 — surface any insert failure in UI
+            st.session_state["update_level"] = "error"
+            st.session_state["update_message"] = f"插入失败：{exc}"
         st.rerun()
 
     if message := st.session_state.pop("update_message", None):
@@ -187,14 +189,17 @@ def _execute_update(
         result.observations,
         replace=replace,
     )
-    store.export_parquet(ROOT / "data" / "parquet")
+    export_note = _safe_export_parquet(store)
     count = result.observations.series_id.nunique()
     verb = "全量覆盖" if replace else "增量合并"
     st.session_state["update_level"] = "success"
-    st.session_state["update_message"] = f"{verb} {count}/{len(specs)} 条指标"
+    message = f"{verb} {count}/{len(specs)} 条指标"
+    if export_note:
+        message = f"{message}（{export_note}）"
+    st.session_state["update_message"] = message
     if result.errors:
         st.session_state["update_errors"] = result.errors
-    current.markdown(f"**当前：** {verb} {count}/{len(specs)} 条指标")
+    current.markdown(f"**当前：** {message}")
 
 
 def _execute_insert(specs: list[SeriesSpec], store: MacroStore, picked_ids: list[str]) -> None:
@@ -221,16 +226,29 @@ def _execute_insert(specs: list[SeriesSpec], store: MacroStore, picked_ids: list
     store.upsert_observations(result.observations)
     store.register_catalog(specs)
     run_pipeline(store, specs, pd.Timestamp.today().date(), result.observations, replace=False)
-    store.export_parquet(ROOT / "data" / "parquet")
+    export_note = _safe_export_parquet(store)
 
     count = result.observations.series_id.nunique()
     rows = len(result.observations)
     progress_bar.progress(1.0, text="完成")
-    st.success(f"已插入 {count} 条指标（共 {rows} 行观测值）")
+    message = f"已插入 {count} 条指标（共 {rows} 行观测值）"
+    if export_note:
+        message = f"{message}（{export_note}）"
+    st.success(message)
     if result.errors:
         with st.expander(f"{len(result.errors)} 条失败"):
             for sid, err in result.errors.items():
                 st.caption(f"`{sid}`：{err}")
+
+
+def _safe_export_parquet(store: MacroStore) -> str | None:
+    """Export parquet to a writable dir; never block a successful DB update."""
+    try:
+        target = parquet_dir()
+        store.export_parquet(target)
+        return None
+    except OSError as exc:
+        return f"Parquet 导出跳过：{exc}"
 
 
 def _build_display(frame: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
