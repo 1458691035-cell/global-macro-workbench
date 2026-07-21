@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -16,6 +17,13 @@ from .tsanghi_source import fetch_tsanghi_realtime
 
 ROOT = Path(__file__).resolve().parents[1]
 
+
+def _db_path() -> Path:
+    env = os.environ.get("MACRO_DB_PATH")
+    if env:
+        return Path(env)
+    return ROOT / "data" / "macro.duckdb"
+
 CHANGE_COLUMNS: dict[str, list[tuple[str, str]]] = {
     "daily": [("change_1d", "change_1d"), ("change_1w", "change_1w"), ("change_1m", "change_1m")],
     "weekly": [("change_1d", "周变化"), ("change_1m", "月变化")],
@@ -31,7 +39,7 @@ def run() -> None:
     st.set_page_config(page_title="全球宏观策略工作台", page_icon="🌐", layout="wide")
     st.title("全球宏观策略工作台")
     specs = load_series(ROOT / "config" / "series.yaml")
-    store = MacroStore(ROOT / "data" / "macro.duckdb")
+    store = MacroStore(_db_path())
 
     if st.sidebar.button("实时更新", width="stretch", type="primary"):
         st.session_state["pending_realtime"] = True
