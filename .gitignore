@@ -16,3 +16,5 @@ data/validation-report.md
 !data/raw/.gitkeep
 !data/curated/.gitkeep
 !data/reports/.gitkeep
+
+.streamlit/secrets.toml
