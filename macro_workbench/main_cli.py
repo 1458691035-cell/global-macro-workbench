@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from .data_router import fetch_all_observations
 from .memo import generate_memo
 from .models import load_series
+from .paths import db_path, ensure_writable_runtime, parquet_dir
 from .pipeline import run_pipeline
 from .storage import MacroStore
 from .validation import validate_replay
@@ -19,8 +20,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main(argv: list[str] | None = None) -> int:
     load_dotenv(ROOT / ".env", override=False)
+    ensure_writable_runtime()
     parser = argparse.ArgumentParser(description="全球宏观策略工作台")
-    parser.add_argument("--db", default=str(ROOT / "data" / "macro.duckdb"))
+    parser.add_argument("--db", default=None, help="DuckDB 路径（默认自动选择可写位置）")
     commands = parser.add_subparsers(dest="command", required=True)
     update = commands.add_parser("update", help="通过 OpenBB(+AKShare) 更新真实数据")
     update.add_argument("--as-of", default=date.today().isoformat())
@@ -39,13 +41,13 @@ def main(argv: list[str] | None = None) -> int:
     replay = commands.add_parser("validate")
     replay.add_argument("--end")
     replay.add_argument("--days", type=int, default=10)
-    replay.add_argument("--output", default=str(ROOT / "data" / "validation-report.md"))
+    replay.add_argument("--output", default=None)
     memo = commands.add_parser("memo")
     memo.add_argument("--as-of", default=date.today().isoformat())
     memo.add_argument("--output")
     args = parser.parse_args(argv)
     specs = load_series(ROOT / "config" / "series.yaml")
-    store = MacroStore(args.db)
+    store = MacroStore(args.db or db_path())
     try:
         if args.command == "update":
             mode = "full" if args.full else "incremental"
@@ -79,7 +81,7 @@ def main(argv: list[str] | None = None) -> int:
                 result.observations,
                 replace=args.full,
             )
-            store.export_parquet(ROOT / "data" / "parquet")
+            store.export_parquet(parquet_dir())
             succeeded = result.observations.series_id.nunique()
             verb = "覆盖写入" if args.full else "合并写入"
             print(
@@ -103,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
             if fixed:
                 print(f"已校正 {fixed:,} 条 AKShare vintage，使其可按观测日回放。")
             report = validate_replay(store, specs, args.end, args.days)
-            output = Path(args.output)
+            output = Path(args.output or (parquet_dir().parent / "validation-report.md"))
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(report.as_markdown(), encoding="utf-8")
             print(report.as_markdown())
