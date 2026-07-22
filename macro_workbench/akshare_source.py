@@ -47,15 +47,18 @@ class FetchResult:
     errors: dict[str, str]
 
 
-# China-only endpoints. US/global series must go through OpenBB (FRED / yfinance)
-# and must never silently fall back here.
+# Explicit allowlist only. US/global FRED/market series stay on OpenBB/tsanghi;
+# do not silently fall back here. Exceptions: oil/bitcoin via Sina global futures.
 ENDPOINTS: dict[str, Endpoint] = {
     "china_stocks": Endpoint(
         "stock_zh_index_daily", "date", "close", {"symbol": "sh000300"}
     ),
     "china_credit": Endpoint("macro_china_new_financial_credit", "月份", "当月"),
     "china_pmi": Endpoint("macro_china_pmi", "月份", "制造业-指数"),
+    "china_cpi": Endpoint("macro_china_cpi", "月份", "全国-同比增长"),
     "global_trade": Endpoint("macro_china_exports_yoy", "日期", "今值"),
+    "oil": Endpoint("futures_foreign_hist", "date", "close", {"symbol": "OIL"}),
+    "bitcoin": Endpoint("futures_foreign_hist", "date", "close", {"symbol": "BTC"}),
 }
 
 

@@ -31,6 +31,8 @@ class SeriesSpec:
     direction: str
     staleness_days: int
     asset_proxy: str | None = None
+    description: str = ""
+    yfinance_symbol: str | None = None
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "SeriesSpec":
