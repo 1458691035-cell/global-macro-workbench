@@ -13,7 +13,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS series_catalog (
     id VARCHAR PRIMARY KEY, name VARCHAR, module VARCHAR, source VARCHAR,
     source_series_id VARCHAR, asset_proxy VARCHAR, frequency VARCHAR, unit VARCHAR,
-    transform VARCHAR, direction VARCHAR, staleness_days INTEGER
+    transform VARCHAR, direction VARCHAR, staleness_days INTEGER, description VARCHAR
 );
 CREATE TABLE IF NOT EXISTS raw_observations (
     series_id VARCHAR, observation_date DATE, value DOUBLE, release_time TIMESTAMP,
@@ -75,6 +75,20 @@ class MacroStore:
         ):
             if column not in existing:
                 self.connection.execute(ddl)
+        catalog_cols = {
+            row[0]
+            for row in self.connection.execute(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'series_catalog'
+                """
+            ).fetchall()
+        }
+        if "description" not in catalog_cols:
+            self.connection.execute(
+                "ALTER TABLE series_catalog ADD COLUMN description VARCHAR"
+            )
 
     def close(self) -> None:
         self.connection.close()
@@ -94,12 +108,14 @@ class MacroStore:
                 s.transform,
                 s.direction,
                 s.staleness_days,
+                s.description,
             )
             for s in specs
         ]
         self.connection.executemany(
             """
-            INSERT OR REPLACE INTO series_catalog VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO series_catalog
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             rows,
         )
@@ -255,7 +271,8 @@ class MacroStore:
         return self.query(
             f"""
             SELECT d.*, c.name, c.module, c.source, c.source_series_id, c.asset_proxy,
-                   c.frequency, c.unit, c.transform, c.direction, q.status, q.message
+                   c.frequency, c.unit, c.transform, c.direction, c.description,
+                   q.status, q.message
             FROM derived_signals d
             JOIN series_catalog c ON c.id = d.series_id
             LEFT JOIN quality_status q USING (series_id, as_of_date)

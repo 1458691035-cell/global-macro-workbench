@@ -29,7 +29,7 @@ python -m streamlit run workbench.py
 - AKShare：沪深300、中国 PMI、新增信贷、出口同比等
 
 `update` 会写入真实观测、清理 `demo:` 数据，并导出 `data/parquet/`。
-缺少可靠一致预期源时，`surprise` 保持为空。
+面板表格只展示最新值、变换值、近期变化、历史分位与状态（不再展示 level / momentum / surprise / z-score）。
 
 ```bash
 python -m macro_workbench.main_cli memo --as-of 2026-07-17 --output data/memo.md
@@ -37,7 +37,7 @@ python -m macro_workbench.main_cli memo --as-of 2026-07-17 --output data/memo.md
 
 ## 数据与决策链
 
-- `config/series.yaml`：37 条指标的来源、代理、频率、转换、方向含义与过期阈值
+- `config/series.yaml`：54 条指标的来源、代理、说明、频率、转换、方向含义与过期阈值
 - `raw_observations`：原始值、发布日期、观测日期与 vintage；计算时按 `release_time <= as_of`
 - `derived_signals` / `quality_status` / `regime_snapshots` / `memo_drafts`：信号、质量、四象限与 memo
 

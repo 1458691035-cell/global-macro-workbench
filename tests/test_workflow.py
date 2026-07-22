@@ -14,9 +14,9 @@ from macro_workbench.validation import validate_replay
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_mvp_catalog_has_37_explainable_series_after_replay_pruning() -> None:
+def test_mvp_catalog_has_54_explainable_series() -> None:
     specs = load_series(ROOT / "config" / "series.yaml")
-    assert len(specs) == 37
+    assert len(specs) == 54
     assert {spec.module for spec in specs} == {
         "cross_asset",
         "growth",
@@ -26,6 +26,7 @@ def test_mvp_catalog_has_37_explainable_series_after_replay_pruning() -> None:
         "events",
     }
     assert all(spec.transform and spec.direction and spec.staleness_days for spec in specs)
+    assert all(spec.description for spec in specs)
 
 
 def test_pipeline_is_vintage_aware_and_generates_memo(tmp_path: Path) -> None:

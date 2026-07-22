@@ -90,7 +90,17 @@ def generate_memo(store: MacroStore, as_of: str | date) -> str:
         *[
             f"- {row['name']}：趋势 z-score {row.trend_zscore:+.2f}，分位 {row.percentile:.0f}%。"
             for _, row in signals[
-                signals.series_id.isin(["breakeven_10y", "term_premium", "dxy", "hy_spread"])
+                signals.series_id.isin(
+                    [
+                        "breakeven_10y",
+                        "fwd_inflation_5y5y",
+                        "term_premium",
+                        "dxy",
+                        "hy_spread",
+                        "ig_spread",
+                        "em_hg_spread",
+                    ]
+                )
             ].iterrows()
         ],
         "",

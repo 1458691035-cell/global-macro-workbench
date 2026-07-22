@@ -39,29 +39,91 @@ def _obs(series_id: str, day: str, value: float) -> dict[str, object]:
 
 
 def test_resolve_start_dates_incremental_and_full() -> None:
-    specs = [_spec("us_10y"), _spec("us_2y")]
-    latest = {"us_10y": date(2026, 7, 1)}
+    daily = [_spec("us_10y"), _spec("us_2y")]
+    # Fresh enough daily: resume from last-1d.
+    latest = {"us_10y": date(2026, 7, 15)}
     starts = resolve_start_dates(
-        specs,
+        daily,
         end="2026-07-17",
         years=5,
         mode="incremental",
-        lookback_days=30,
+        lookback_days=5,
         latest_dates=latest,
     )
-    assert starts["us_10y"].date() == date(2026, 6, 1)
+    assert starts["us_10y"].date() == date(2026, 7, 14)
     assert starts["us_2y"].date() == date(2021, 7, 17)
 
+    # Daily gap > 5: only recent 5d window.
+    stale = resolve_start_dates(
+        daily,
+        end="2026-07-17",
+        years=5,
+        mode="incremental",
+        lookback_days=5,
+        latest_dates={"us_10y": date(2026, 7, 1)},
+    )
+    assert stale["us_10y"].date() == date(2026, 7, 12)
+
+    # Monthly uses 65d window: June -> July still resumes from last-1.
+    monthly = [
+        SeriesSpec(
+            id="us_payrolls",
+            name="us_payrolls",
+            module="growth",
+            source="openbb",
+            series_id="fred:PAYEMS",
+            frequency="monthly",
+            unit="thousands",
+            transform="mom_change",
+            direction="growth",
+            staleness_days=65,
+        )
+    ]
+    monthly_starts = resolve_start_dates(
+        monthly,
+        end="2026-07-22",
+        years=5,
+        mode="incremental",
+        lookback_days=5,
+        latest_dates={"us_payrolls": date(2026, 6, 1)},
+    )
+    assert monthly_starts["us_payrolls"].date() == date(2026, 5, 31)
+
     full = resolve_start_dates(
-        specs,
+        daily,
         end="2026-07-17",
         years=5,
         mode="full",
-        lookback_days=30,
+        lookback_days=5,
         latest_dates=latest,
     )
     assert full["us_10y"].date() == date(2021, 7, 17)
     assert full["us_2y"].date() == date(2021, 7, 17)
+
+
+def test_soften_empty_window_errors_for_incremental() -> None:
+    from macro_workbench.data_router import NO_NEW_VALUE_MSG, soften_empty_window_errors
+
+    soft = soften_empty_window_errors(
+        {
+            "us_payrolls": "OpenBBError: Results not found.",
+            "us_ism": "OpenBBError: Results not found.",
+            "gold": "network boom",
+        },
+        latest_dates={"us_payrolls": date(2026, 6, 1)},
+        mode="incremental",
+    )
+    assert soft["us_payrolls"] == NO_NEW_VALUE_MSG
+    assert soft["us_ism"].startswith("OpenBBError")
+    assert soft["gold"] == "network boom"
+
+    hard = soften_empty_window_errors(
+        {"us_payrolls": "OpenBBError: Results not found."},
+        latest_dates={"us_payrolls": date(2026, 6, 1)},
+        mode="full",
+    )
+    assert hard["us_payrolls"].startswith("OpenBBError")
+
 
 
 def test_upsert_keeps_history_replace_clears(tmp_path: Path) -> None:

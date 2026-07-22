@@ -35,8 +35,8 @@ def main(argv: list[str] | None = None) -> int:
     update.add_argument(
         "--lookback",
         type=int,
-        default=30,
-        help="增量回看天数，覆盖近期修订（默认 30）",
+        default=5,
+        help="日频增量回看天数；周/月分别至少 14/65 天（默认 5）",
     )
     replay = commands.add_parser("validate")
     replay.add_argument("--end")
@@ -56,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
             if purged:
                 print(f"已清理 {purged} 条错误来源历史（OpenBB/AKShare 交叉污染）。")
             print(
-                f"更新模式：{'全量刷新' if args.full else f'增量（回看 {args.lookback} 天）'}；"
+                f"更新模式：{'全量刷新' if args.full else '增量（日/周/月按频率回看）'}；"
                 f"库中已有 {len(latest_dates)}/{len(specs)} 条序列历史。"
             )
             result = fetch_all_observations(
